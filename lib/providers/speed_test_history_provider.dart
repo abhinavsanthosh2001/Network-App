@@ -4,23 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/speed_test_result.dart';
 
-/// Provider for managing speed test result history.
-/// 
-/// This provider maintains a persistent list of speed test results using
-/// SharedPreferences for local storage. It handles:
-/// - Loading history on initialization
-/// - Adding new results with automatic persistence
-/// - Clearing all history
-/// - Maintaining chronological order (newest first)
-/// - Enforcing a maximum history size of 100 entries
-/// 
-/// Requirements:
-/// - 5.1: Persist test results to history
-/// - 5.3: Maintain chronological order (newest first)
-/// - 5.4: Use JSON serialization for persistence
-/// - 5.5: Load history on app start
-/// - 5.6, 5.7: Support 100 entries, remove oldest when exceeded
-/// - 10.1, 10.2, 10.3, 10.4: History management operations
 class SpeedTestHistoryProvider extends StateNotifier<List<SpeedTestResult>> {
   static const String _storageKey = 'speed_test_history';
   static const int _maxHistorySize = 100;
