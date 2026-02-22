@@ -9,7 +9,7 @@ A Flutter app for scanning local networks, analyzing Wi-Fi connections, and moni
 - All dependencies configured
 - Platform permissions set up
 
-### Phase 2 - Get Network Info
+### Phase 2 ✅- Get Network Info
 - Current IP address
 - Gateway & Subnet
 - Wi-Fi SSID
@@ -31,7 +31,7 @@ A Flutter app for scanning local networks, analyzing Wi-Fi connections, and moni
 - Channel info
 - Signal history chart
 
-### Phase 6 - Speed Test
+### Phase 6 ✅ - Speed Test
 - Download/upload test
 - Latency measurement
 - Result history

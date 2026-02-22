@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'network_scan_screen.dart';
 import 'wifi_info_screen.dart';
+import 'speed_test_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -41,8 +42,9 @@ class DashboardScreen extends StatelessWidget {
               icon: Icons.speed,
               title: 'Speed Test',
               color: Colors.orange,
-              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Coming in Phase 6')),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SpeedTestScreen()),
               ),
             ),
             _DashboardCard(

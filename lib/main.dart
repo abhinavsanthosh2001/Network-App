@@ -1,9 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/dashboard_screen.dart';
+import 'providers/speed_test_history_provider.dart';
 
-void main() {
-  runApp(const ProviderScope(child: NetworkScannerApp()));
+void main() async {
+  // Ensure Flutter bindings are initialized
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize SharedPreferences for speed test history persistence
+  final prefs = await SharedPreferences.getInstance();
+  
+  runApp(
+    ProviderScope(
+      overrides: [
+        // Override the history provider with actual SharedPreferences instance
+        speedTestHistoryProvider.overrideWith(
+          (ref) => SpeedTestHistoryProvider(prefs),
+        ),
+      ],
+      child: const NetworkScannerApp(),
+    ),
+  );
 }
 
 class NetworkScannerApp extends StatelessWidget {
