@@ -109,17 +109,22 @@ class SpeedTestService {
   }
 
   // Latency measurement
-  Future<List<int>> performLatencySamples(TestServer server, int count) async {
+  Future<List<int>> performLatencySamples(
+    TestServer server,
+    int count, {
+    Function(int)? onProgress,
+  }) async {
     final List<int> successfulSamples = [];
 
     for (int i = 0; i < count; i++) {
       for (int retry = 0; retry <= SpeedTestConfig.maxRetries; retry++) {
         try {
           successfulSamples.add(await measureServerLatency(server));
+          onProgress?.call(successfulSamples.length);
           break;
         } catch (e) {
           if (retry < SpeedTestConfig.maxRetries) {
-            await Future.delayed(Duration(milliseconds: SpeedTestConfig.retryDelay));
+            await Future.delayed(const Duration(milliseconds: SpeedTestConfig.retryDelay));
           }
         }
       }
@@ -131,9 +136,14 @@ class SpeedTestService {
   Future<Map<String, dynamic>> measureLatency({
     TestServer? server,
     int samples = SpeedTestConfig.latencySamples,
+    Function(int)? onProgress,
   }) async {
     final testServer = server ?? await selectOptimalServer();
-    final latencySamples = await performLatencySamples(testServer, samples);
+    final latencySamples = await performLatencySamples(
+      testServer,
+      samples,
+      onProgress: onProgress,
+    );
 
     final failureRate = (samples - latencySamples.length) / samples;
     if (failureRate > SpeedTestConfig.failureThreshold) {
@@ -171,7 +181,12 @@ class SpeedTestService {
     );
   }
 
-  Future<List<double>> performDownloadSamples(TestServer server, int count) async {
+  Future<List<double>> performDownloadSamples(
+    TestServer server,
+    int count, {
+    Function(int)? onProgress,
+    Function(double)? onSpeedUpdate,
+  }) async {
     final collector = SampleCollector(performDownloadSample);
     return await collector.collect(
       server,
@@ -180,14 +195,22 @@ class SpeedTestService {
       startSize: SpeedTestConfig.downloadStartSize,
       maxSize: SpeedTestConfig.downloadMaxSize,
       varianceThreshold: SpeedTestConfig.downloadVarianceThreshold,
+      onProgress: onProgress,
+      onSpeedUpdate: onSpeedUpdate,
     );
   }
 
-  Future<Map<String, dynamic>> measureDownloadSpeed({TestServer? server}) async {
+  Future<Map<String, dynamic>> measureDownloadSpeed({
+    TestServer? server,
+    Function(int)? onProgress,
+    Function(double)? onSpeedUpdate,
+  }) async {
     final testServer = server ?? await selectOptimalServer();
     final downloadSamples = await performDownloadSamples(
       testServer,
       SpeedTestConfig.downloadMaxSamples,
+      onProgress: onProgress,
+      onSpeedUpdate: onSpeedUpdate,
     );
 
     if (downloadSamples.length < SpeedTestConfig.downloadMinSamples) {
@@ -220,7 +243,12 @@ class SpeedTestService {
     );
   }
 
-  Future<List<double>> performUploadSamples(TestServer server, int count) async {
+  Future<List<double>> performUploadSamples(
+    TestServer server,
+    int count, {
+    Function(int)? onProgress,
+    Function(double)? onSpeedUpdate,
+  }) async {
     final collector = SampleCollector(performUploadSample);
     return await collector.collect(
       server,
@@ -229,14 +257,22 @@ class SpeedTestService {
       startSize: SpeedTestConfig.uploadStartSize,
       maxSize: SpeedTestConfig.uploadMaxSize,
       varianceThreshold: SpeedTestConfig.uploadVarianceThreshold,
+      onProgress: onProgress,
+      onSpeedUpdate: onSpeedUpdate,
     );
   }
 
-  Future<Map<String, dynamic>> measureUploadSpeed({TestServer? server}) async {
+  Future<Map<String, dynamic>> measureUploadSpeed({
+    TestServer? server,
+    Function(int)? onProgress,
+    Function(double)? onSpeedUpdate,
+  }) async {
     final testServer = server ?? await selectOptimalServer();
     final uploadSamples = await performUploadSamples(
       testServer,
       SpeedTestConfig.uploadMaxSamples,
+      onProgress: onProgress,
+      onSpeedUpdate: onSpeedUpdate,
     );
 
     if (uploadSamples.length < SpeedTestConfig.uploadMinSamples) {
@@ -292,7 +328,10 @@ class SpeedTestService {
       totalSamples: SpeedTestConfig.latencySamples,
       onProgress: onProgress,
       cancellationToken: cancellationToken,
-      measurement: () => measureLatency(server: selectedServer),
+      measurement: (progressCallback, speedCallback) => measureLatency(
+        server: selectedServer,
+        onProgress: progressCallback,
+      ),
     );
 
     final int latency = latencyResult['median'];
@@ -312,7 +351,11 @@ class SpeedTestService {
       totalSamples: SpeedTestConfig.downloadMaxSamples,
       onProgress: onProgress,
       cancellationToken: cancellationToken,
-      measurement: () => measureDownloadSpeed(server: selectedServer),
+      measurement: (progressCallback, speedCallback) => measureDownloadSpeed(
+        server: selectedServer,
+        onProgress: progressCallback,
+        onSpeedUpdate: speedCallback,
+      ),
     );
 
     final double downloadSpeed = downloadResult['median'];
@@ -333,7 +376,11 @@ class SpeedTestService {
       totalSamples: SpeedTestConfig.uploadMaxSamples,
       onProgress: onProgress,
       cancellationToken: cancellationToken,
-      measurement: () => measureUploadSpeed(server: selectedServer),
+      measurement: (progressCallback, speedCallback) => measureUploadSpeed(
+        server: selectedServer,
+        onProgress: progressCallback,
+        onSpeedUpdate: speedCallback,
+      ),
     );
 
     final double uploadSpeed = uploadResult['median'];
@@ -366,9 +413,12 @@ class SpeedTestService {
     required int totalSamples,
     required Function(TestProgress) onProgress,
     CancellationToken? cancellationToken,
-    required Future<Map<String, dynamic>> Function() measurement,
+    required Future<Map<String, dynamic>> Function(Function(int)?, Function(double)?) measurement,
   }) async {
     int elapsedSeconds = 0;
+    int completedSamples = 0;
+    double? currentSpeed;
+    
     final timer = Timer.periodic(
       Duration(milliseconds: SpeedTestConfig.progressUpdateInterval),
       (t) {
@@ -377,14 +427,23 @@ class SpeedTestService {
         onProgress(TestProgress(
           phase: phase,
           elapsedSeconds: elapsedSeconds,
-          completedSamples: 0,
+          completedSamples: completedSamples,
           totalSamples: totalSamples,
+          currentSpeed: currentSpeed,
         ));
       },
     );
 
     try {
-      return await measurement();
+      // Pass callbacks to update completed samples and current speed
+      return await measurement(
+        (samples) {
+          completedSamples = samples;
+        },
+        (speed) {
+          currentSpeed = speed;
+        },
+      );
     } finally {
       timer.cancel();
     }

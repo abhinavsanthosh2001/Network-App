@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 import '../providers/speed_test_provider.dart';
 import '../providers/speed_test_history_provider.dart';
 import '../models/test_progress.dart';
 import '../models/speed_test_result.dart';
+import '../widgets/speedometer_gauge.dart';
+import 'speed_test_history_screen.dart';
 
 class SpeedTestScreen extends ConsumerWidget {
   const SpeedTestScreen({super.key});
@@ -20,48 +24,42 @@ class SpeedTestScreen extends ConsumerWidget {
         actions: [
           if (history.isNotEmpty)
             IconButton(
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () => _showClearHistoryDialog(context, ref),
-              tooltip: 'Clear history',
+              icon: const Icon(Icons.history),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SpeedTestHistoryScreen(),
+                  ),
+                );
+              },
+              tooltip: 'View history',
             ),
         ],
       ),
-      body: Column(
-        children: [
-          // Main test area
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  // Show progress if test is running
-                  if (testState.isRunning && testState.progress != null)
-                    _buildProgressDisplay(testState.progress!)
-                  // Show error if test failed
-                  else if (testState.error != null)
-                    _buildErrorDisplay(testState.error!, ref)
-                  // Show result if test completed
-                  else if (testState.result != null)
-                    _buildResultDisplay(testState.result!)
-                  // Show start button if idle
-                  else
-                    _buildIdleState(),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Control buttons
-                  _buildControlButtons(testState, ref),
-                ],
-              ),
-            ),
-          ),
-          
-          // History section
-          if (history.isNotEmpty) ...[
-            const Divider(height: 1),
-            _buildHistorySection(history, ref),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Show progress if test is running
+            if (testState.isRunning && testState.progress != null)
+              _buildProgressDisplay(testState.progress!)
+            // Show error if test failed
+            else if (testState.error != null)
+              _buildErrorDisplay(testState.error!, ref)
+            // Show result if test completed
+            else if (testState.result != null)
+              _buildResultDisplay(testState.result!, context)
+            // Show start button if idle
+            else
+              _buildIdleState(),
+            
+            const SizedBox(height: 24),
+            
+            // Control buttons
+            _buildControlButtons(testState, ref),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -100,8 +98,8 @@ class SpeedTestScreen extends ConsumerWidget {
   /// Builds the real-time progress display during test execution.
   /// 
   /// Shows:
+  /// - Speedometer gauge with current progress
   /// - Current test phase
-  /// - Progress bar with percentage
   /// - Intermediate speed/latency values
   /// - Elapsed time for current phase
   /// 
@@ -111,112 +109,47 @@ class SpeedTestScreen extends ConsumerWidget {
       children: [
         const SizedBox(height: 20),
         
-        // Phase indicator
-        Text(
-          progress.phaseDescription,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        
-        const SizedBox(height: 24),
-        
-        // Progress bar
-        LinearProgressIndicator(
-          value: progress.progressPercentage,
-          minHeight: 8,
-          backgroundColor: Colors.grey.shade200,
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade400),
-        ),
-        
-        const SizedBox(height: 12),
-        
-        // Progress percentage
-        Text(
-          '${(progress.progressPercentage * 100).toStringAsFixed(0)}%',
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.grey.shade600,
-          ),
+        // Speedometer gauge
+        SpeedometerGauge(
+          value: 0.0, // Not used anymore, speed drives the display
+          label: progress.phaseDescription,
+          currentValue: progress.currentSpeed != null
+              ? '${progress.currentSpeed!.toStringAsFixed(1)} Mbps'
+              : progress.currentLatency != null
+                  ? '${progress.currentLatency} ms'
+                  : null,
+          currentSpeed: progress.currentSpeed,
+          maxSpeed: 300.0, // Scale for speeds around 250 Mbps
         ),
         
         const SizedBox(height: 32),
-        
-        // Current measurements
-        if (progress.currentSpeed != null)
-          _buildProgressMetric(
-            'Current Speed',
-            '${progress.currentSpeed!.toStringAsFixed(1)} Mbps',
-            Icons.speed,
-          ),
-        
-        if (progress.currentLatency != null)
-          _buildProgressMetric(
-            'Latency',
-            '${progress.currentLatency} ms',
-            Icons.timer,
-          ),
-        
-        const SizedBox(height: 24),
         
         // Elapsed time
         Text(
           'Elapsed: ${progress.elapsedSeconds}s',
           style: TextStyle(
-            fontSize: 14,
+            fontSize: 16,
             color: Colors.grey.shade600,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildProgressMetric(String label, String value, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 28, color: Colors.blue.shade400),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Builds the result display after test completion.
   /// 
   /// Shows:
-  /// - Download speed with icon and formatting
-  /// - Upload speed with icon and formatting
+  /// - Download and upload speeds on same line
   /// - Latency with icon and formatting
   /// - Server name used for test
   /// - Timestamp of test
   /// - Poor connection indicator if applicable
+  /// - Share button to share results
   /// - Color coding for speeds
   /// 
   /// Requirements: 2.7, 3.7, 4.5, 5.2
-  Widget _buildResultDisplay(result) {
+  Widget _buildResultDisplay(SpeedTestResult result, BuildContext context) {
     return Column(
       children: [
         const SizedBox(height: 20),
@@ -240,27 +173,32 @@ class SpeedTestScreen extends ConsumerWidget {
         
         const SizedBox(height: 32),
         
-        // Download speed
-        _buildResultMetric(
-          'Download',
-          result.formattedDownloadSpeed,
-          Icons.download,
-          _getSpeedColor(result.downloadSpeed),
+        // Download and Upload speeds on same line
+        Row(
+          children: [
+            Expanded(
+              child: _buildResultMetric(
+                'Download',
+                result.formattedDownloadSpeed,
+                Icons.download,
+                _getSpeedColor(result.downloadSpeed),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildResultMetric(
+                'Upload',
+                result.formattedUploadSpeed,
+                Icons.upload,
+                _getSpeedColor(result.uploadSpeed),
+              ),
+            ),
+          ],
         ),
         
-        const SizedBox(height: 24),
+        const SizedBox(height: 12),
         
-        // Upload speed
-        _buildResultMetric(
-          'Upload',
-          result.formattedUploadSpeed,
-          Icons.upload,
-          _getSpeedColor(result.uploadSpeed),
-        ),
-        
-        const SizedBox(height: 24),
-        
-        // Latency
+        // Latency (full width)
         _buildResultMetric(
           'Latency',
           result.formattedLatency,
@@ -317,6 +255,18 @@ class SpeedTestScreen extends ConsumerWidget {
                 '↓${result.downloadSamples} ↑${result.uploadSamples}',
               ),
             ],
+          ),
+        ),
+        
+        const SizedBox(height: 24),
+        
+        // Share button
+        OutlinedButton.icon(
+          onPressed: () => _shareResult(result),
+          icon: const Icon(Icons.share),
+          label: const Text('Share Results'),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           ),
         ),
       ],
@@ -528,143 +478,19 @@ class SpeedTestScreen extends ConsumerWidget {
     }
   }
 
-  /// Builds the history section with list of past results.
-  /// 
-  /// Shows:
-  /// - Results in chronological order (newest first)
-  /// - Download/upload speeds and latency for each entry
-  /// - Human-readable timestamps
-  /// - Swipe-to-delete for individual entries
-  /// - Empty state when no history
-  /// 
-  /// Requirements: 5.3, 10.1, 10.2, 10.4, 10.5
-  Widget _buildHistorySection(List history, WidgetRef ref) {
-    return Expanded(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'History',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  '${history.length} test${history.length == 1 ? '' : 's'}',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: history.length,
-              itemBuilder: (context, index) {
-                final result = history[index];
-                return Dismissible(
-                  key: Key(result.timestamp.toString()),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    color: Colors.red,
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 16),
-                    child: const Icon(Icons.delete, color: Colors.white),
-                  ),
-                  onDismissed: (direction) async {
-                    // Create a new list without this result
-                    final historyNotifier = ref.read(speedTestHistoryProvider.notifier);
-                    
-                    // Get current history, remove the item, and save
-                    final currentHistory = ref.read(speedTestHistoryProvider);
-                    final updatedHistory = List<SpeedTestResult>.from(currentHistory)
-                      ..removeAt(index);
-                    
-                    // Clear and re-add all items (simple approach for now)
-                    await historyNotifier.clearHistory();
-                    for (final item in updatedHistory) {
-                      await historyNotifier.addResult(item);
-                    }
-                  },
-                  child: _buildHistoryItem(result),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHistoryItem(result) {
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: _getSpeedColor(result.downloadSpeed).withOpacity(0.2),
-        child: Icon(
-          Icons.speed,
-          color: _getSpeedColor(result.downloadSpeed),
-        ),
-      ),
-      title: Row(
-        children: [
-          Icon(Icons.download, size: 16, color: Colors.grey.shade600),
-          const SizedBox(width: 4),
-          Text(
-            '${result.downloadSpeed.toStringAsFixed(1)} Mbps',
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(width: 16),
-          Icon(Icons.upload, size: 16, color: Colors.grey.shade600),
-          const SizedBox(width: 4),
-          Text(
-            '${result.uploadSpeed.toStringAsFixed(1)} Mbps',
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-        ],
-      ),
-      subtitle: Text(
-        'Latency: ${result.latency} ms • ${result.serverName}',
-        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-      ),
-      trailing: Text(
-        DateFormat('MMM d\nHH:mm').format(result.timestamp),
-        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-        textAlign: TextAlign.right,
-      ),
-    );
-  }
-
   /// Shows confirmation dialog before clearing history.
-  void _showClearHistoryDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear History'),
-        content: const Text(
-          'Are you sure you want to clear all test history? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              ref.read(speedTestHistoryProvider.notifier).clearHistory();
-              Navigator.of(context).pop();
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Clear'),
-          ),
-        ],
-      ),
-    );
+  void _shareResult(SpeedTestResult result) {
+    final text = '''
+Speed Test Results
+━━━━━━━━━━━━━━━━━━
+📥 Download: ${result.formattedDownloadSpeed}
+📤 Upload: ${result.formattedUploadSpeed}
+⏱️ Latency: ${result.formattedLatency}
+
+Server: ${result.serverName}
+Date: ${DateFormat('MMM d, yyyy HH:mm').format(result.timestamp)}
+''';
+    
+    Share.share(text, subject: 'My Speed Test Results');
   }
 }

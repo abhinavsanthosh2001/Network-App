@@ -16,6 +16,8 @@ class SampleCollector {
     required int startSize,
     required int maxSize,
     required double varianceThreshold,
+    Function(int completedSamples)? onProgress,
+    Function(double currentSpeed)? onSpeedUpdate,
   }) async {
     final List<double> successfulSamples = [];
     int currentSize = startSize;
@@ -30,6 +32,10 @@ class SampleCollector {
 
       if (sampleSpeed != null) {
         successfulSamples.add(sampleSpeed);
+        
+        // Report progress and current speed
+        onProgress?.call(successfulSamples.length);
+        onSpeedUpdate?.call(sampleSpeed);
 
         // Adapt for next sample
         if (i < maxSamples - 1) {
@@ -44,11 +50,15 @@ class SampleCollector {
 
       // Check if we can stop early
       if (i >= minSamples - 1) {
-        if (i >= maxSamples - 1) break;
+        if (i >= maxSamples - 1) {
+          break;
+        }
         if (!SpeedTestHelpers.needsAdditionalSamples(
           successfulSamples,
           varianceThreshold,
-        )) break;
+        )) {
+          break;
+        }
       }
     }
 
