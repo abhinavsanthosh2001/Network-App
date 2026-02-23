@@ -337,22 +337,61 @@ class SpeedTestService {
     final int latency = latencyResult['median'];
     final bool isPoorConnection = latencyResult['isPoorConnection'];
 
+    // Detect slow connection and choose appropriate test parameters
+    final bool isSlowConnection =
+        latency > SpeedTestConfig.slowConnectionLatencyThreshold ||
+        isPoorConnection;
+
+    final int dlMinSamples = isSlowConnection
+        ? SpeedTestConfig.slowDownloadMinSamples
+        : SpeedTestConfig.downloadMinSamples;
+    final int dlMaxSamples = isSlowConnection
+        ? SpeedTestConfig.slowDownloadMaxSamples
+        : SpeedTestConfig.downloadMaxSamples;
+    final int dlStartSize = isSlowConnection
+        ? SpeedTestConfig.slowDownloadStartSize
+        : SpeedTestConfig.downloadStartSize;
+    final int dlMaxSize = isSlowConnection
+        ? SpeedTestConfig.slowDownloadMaxSize
+        : SpeedTestConfig.downloadMaxSize;
+    final int ulMinSamples = isSlowConnection
+        ? SpeedTestConfig.slowUploadMinSamples
+        : SpeedTestConfig.uploadMinSamples;
+    final int ulMaxSamples = isSlowConnection
+        ? SpeedTestConfig.slowUploadMaxSamples
+        : SpeedTestConfig.uploadMaxSamples;
+    final int ulStartSize = isSlowConnection
+        ? SpeedTestConfig.slowUploadStartSize
+        : SpeedTestConfig.uploadStartSize;
+    final int ulMaxSize = isSlowConnection
+        ? SpeedTestConfig.slowUploadMaxSize
+        : SpeedTestConfig.uploadMaxSize;
+    final double varianceThreshold = isSlowConnection
+        ? SpeedTestConfig.slowVarianceThreshold
+        : SpeedTestConfig.downloadVarianceThreshold;
+
     // Download
     onProgress(TestProgress(
       phase: TestPhase.download,
       elapsedSeconds: 0,
       completedSamples: 0,
-      totalSamples: SpeedTestConfig.downloadMaxSamples,
+      totalSamples: dlMaxSamples,
       currentLatency: latency,
     ));
 
     final downloadResult = await _measureWithProgress(
       phase: TestPhase.download,
-      totalSamples: SpeedTestConfig.downloadMaxSamples,
+      totalSamples: dlMaxSamples,
       onProgress: onProgress,
       cancellationToken: cancellationToken,
-      measurement: (progressCallback, speedCallback) => measureDownloadSpeed(
-        server: selectedServer,
+      measurement: (progressCallback, speedCallback) =>
+          _measureDownloadWithParams(
+        server: selectedServer!,
+        maxSamples: dlMaxSamples,
+        minSamples: dlMinSamples,
+        startSize: dlStartSize,
+        maxSize: dlMaxSize,
+        varianceThreshold: varianceThreshold,
         onProgress: progressCallback,
         onSpeedUpdate: speedCallback,
       ),
@@ -366,18 +405,24 @@ class SpeedTestService {
       phase: TestPhase.upload,
       elapsedSeconds: 0,
       completedSamples: 0,
-      totalSamples: SpeedTestConfig.uploadMaxSamples,
+      totalSamples: ulMaxSamples,
       currentLatency: latency,
       currentSpeed: downloadSpeed,
     ));
 
     final uploadResult = await _measureWithProgress(
       phase: TestPhase.upload,
-      totalSamples: SpeedTestConfig.uploadMaxSamples,
+      totalSamples: ulMaxSamples,
       onProgress: onProgress,
       cancellationToken: cancellationToken,
-      measurement: (progressCallback, speedCallback) => measureUploadSpeed(
-        server: selectedServer,
+      measurement: (progressCallback, speedCallback) =>
+          _measureUploadWithParams(
+        server: selectedServer!,
+        maxSamples: ulMaxSamples,
+        minSamples: ulMinSamples,
+        startSize: ulStartSize,
+        maxSize: ulMaxSize,
+        varianceThreshold: varianceThreshold,
         onProgress: progressCallback,
         onSpeedUpdate: speedCallback,
       ),
@@ -406,6 +451,78 @@ class SpeedTestService {
       uploadSamples: uploadSamples,
       isPoorConnection: isPoorConnection,
     );
+  }
+
+  Future<Map<String, dynamic>> _measureDownloadWithParams({
+    required TestServer server,
+    required int maxSamples,
+    required int minSamples,
+    required int startSize,
+    required int maxSize,
+    required double varianceThreshold,
+    Function(int)? onProgress,
+    Function(double)? onSpeedUpdate,
+  }) async {
+    final collector = SampleCollector(performDownloadSample);
+    final samples = await collector.collect(
+      server,
+      maxSamples,
+      minSamples: minSamples,
+      startSize: startSize,
+      maxSize: maxSize,
+      varianceThreshold: varianceThreshold,
+      onProgress: onProgress,
+      onSpeedUpdate: onSpeedUpdate,
+    );
+
+    if (samples.length < minSamples) {
+      throw Exception('Download test failed: insufficient samples.');
+    }
+    if (samples.isEmpty) {
+      throw Exception('All download samples failed.');
+    }
+
+    final medianSpeed = SpeedTestHelpers.calculateMedian(samples);
+    return {
+      'median': double.parse(medianSpeed.toStringAsFixed(1)),
+      'sampleCount': samples.length,
+    };
+  }
+
+  Future<Map<String, dynamic>> _measureUploadWithParams({
+    required TestServer server,
+    required int maxSamples,
+    required int minSamples,
+    required int startSize,
+    required int maxSize,
+    required double varianceThreshold,
+    Function(int)? onProgress,
+    Function(double)? onSpeedUpdate,
+  }) async {
+    final collector = SampleCollector(performUploadSample);
+    final samples = await collector.collect(
+      server,
+      maxSamples,
+      minSamples: minSamples,
+      startSize: startSize,
+      maxSize: maxSize,
+      varianceThreshold: varianceThreshold,
+      onProgress: onProgress,
+      onSpeedUpdate: onSpeedUpdate,
+    );
+
+    if (samples.length < minSamples) {
+      throw Exception('Upload test failed: insufficient samples.');
+    }
+    if (samples.isEmpty) {
+      throw Exception('All upload samples failed.');
+    }
+
+    final medianSpeed = SpeedTestHelpers.calculateMedian(samples);
+    return {
+      'median': double.parse(medianSpeed.toStringAsFixed(1)),
+      'sampleCount': samples.length,
+    };
   }
 
   Future<Map<String, dynamic>> _measureWithProgress({

@@ -1,3 +1,5 @@
+import '../models/speed_test_config.dart';
+
 /// Helper utilities for speed test calculations and adaptive sizing.
 class SpeedTestHelpers {
   /// Calculates the median of a list of numeric values.
@@ -45,21 +47,23 @@ class SpeedTestHelpers {
 
   /// Calculates the next test file size for progressive sizing.
   static int calculateNextSize(double currentSpeed, int currentSize, int maxSize) {
-    const targetSeconds = 7;
+    // Use shorter target for slow connections to keep total test time down
+    final targetSeconds = currentSpeed < 5
+        ? SpeedTestConfig.slowTargetTestDuration
+        : SpeedTestConfig.targetTestDuration;
     final bytesPerSecond = (currentSpeed * 1000000) / 8;
     final idealSize = (bytesPerSecond * targetSeconds).toInt();
 
-    // For very slow connections (<5 Mbps), use smaller files
+    // For very slow connections (<5 Mbps), cap aggressively
     if (currentSpeed < 5) {
-      final slowMaxSize = 5 * 1024 * 1024;
-      return idealSize > slowMaxSize 
-          ? slowMaxSize 
-          : (idealSize < currentSize * 2 ? currentSize * 2 : idealSize);
+      const slowMaxSize = 2 * 1024 * 1024; // 2MB cap
+      final nextSize = idealSize > currentSize ? idealSize : currentSize;
+      return nextSize > slowMaxSize ? slowMaxSize : nextSize;
     }
 
     // For slow connections (5-20 Mbps), use moderate scaling
     if (currentSpeed < 20) {
-      final moderateMaxSize = 20 * 1024 * 1024;
+      const moderateMaxSize = 20 * 1024 * 1024;
       final nextSize = idealSize > currentSize * 2 ? idealSize : currentSize * 2;
       return nextSize > moderateMaxSize ? moderateMaxSize : nextSize;
     }

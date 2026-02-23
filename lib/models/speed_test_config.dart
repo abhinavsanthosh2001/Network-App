@@ -12,17 +12,30 @@ class SpeedTestConfig {
   // Download testing
   static const int downloadMinSamples = 3;
   static const int downloadMaxSamples = 5;
-  static const int downloadStartSize = 2 * 1024 * 1024; // 2MB - smaller start for faster initial test
-  static const int downloadMaxSize = 100 * 1024 * 1024; // 100MB - increased for very fast connections
+  static const int downloadStartSize = 2 * 1024 * 1024; // 2MB
+  static const int downloadMaxSize = 100 * 1024 * 1024; // 100MB
   static const double downloadVarianceThreshold = 0.30; // 30%
-  static const int targetTestDuration = 7; // seconds - target duration per sample
+  static const int targetTestDuration = 7; // seconds per sample
 
   // Upload testing
   static const int uploadMinSamples = 3;
   static const int uploadMaxSamples = 5;
-  static const int uploadStartSize = 1 * 1024 * 1024; // 1MB - smaller start for faster initial test
-  static const int uploadMaxSize = 50 * 1024 * 1024; // 50MB - increased for fast connections
+  static const int uploadStartSize = 1 * 1024 * 1024; // 1MB
+  static const int uploadMaxSize = 50 * 1024 * 1024; // 50MB
   static const double uploadVarianceThreshold = 0.30; // 30%
+
+  // Slow connection overrides (detected via latency phase)
+  static const int slowDownloadMinSamples = 2;
+  static const int slowDownloadMaxSamples = 3;
+  static const int slowDownloadStartSize = 256 * 1024; // 256KB
+  static const int slowDownloadMaxSize = 2 * 1024 * 1024; // 2MB
+  static const int slowUploadMinSamples = 2;
+  static const int slowUploadMaxSamples = 3;
+  static const int slowUploadStartSize = 128 * 1024; // 128KB
+  static const int slowUploadMaxSize = 1 * 1024 * 1024; // 1MB
+  static const int slowTargetTestDuration = 4; // seconds per sample
+  static const double slowVarianceThreshold = 0.40; // more lenient
+  static const int slowConnectionLatencyThreshold = 300; // ms — trigger slow path
 
   // Retry logic
   static const int maxRetries = 2;
