@@ -2,195 +2,152 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 class SpeedometerGauge extends StatelessWidget {
-  final double value; // 0.0 to 1.0 (for progress arc)
+  final double? currentSpeed;
+  final double maxSpeed;
   final String label;
-  final String? currentValue;
+  final String? unit;
   final double size;
-  final double? currentSpeed; // Current speed in Mbps for dynamic display
-  final double maxSpeed; // Maximum speed for gauge scale
 
   const SpeedometerGauge({
     super.key,
-    required this.value,
-    required this.label,
-    this.currentValue,
-    this.size = 200,
     this.currentSpeed,
-    this.maxSpeed = 300.0, // Default max speed 300 Mbps for speeds around 250
+    this.maxSpeed = 300.0,
+    required this.label,
+    this.unit = 'Mbps',
+    this.size = 140,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Always use currentSpeed for needle position when available, ignore progress value
-    final double displayValue = currentSpeed != null 
+    final double ratio = currentSpeed != null
         ? (currentSpeed! / maxSpeed).clamp(0.0, 1.0)
-        : 0.0; // Show 0 when no speed data
+        : 0.0;
+
+    final color = _colorForRatio(ratio);
 
     return SizedBox(
       width: size,
-      height: size,
-      child: CustomPaint(
-        painter: _SpeedometerPainter(
-          value: displayValue,
-          maxSpeed: maxSpeed,
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (currentValue != null) ...[
-                Text(
-                  currentValue!,
-                  style: TextStyle(
-                    fontSize: size * 0.15,
-                    fontWeight: FontWeight.bold,
-                    color: _getColorForValue(displayValue),
-                  ),
-                ),
-                const SizedBox(height: 4),
-              ],
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: size * 0.08,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-            ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: size,
+            height: size * 0.6,
+            child: CustomPaint(
+              painter: _GaugePainter(ratio: ratio, color: color),
+            ),
           ),
-        ),
+          const SizedBox(height: 8),
+          Text(
+            currentSpeed != null
+                ? currentSpeed!.toStringAsFixed(1)
+                : '—',
+            style: TextStyle(
+              fontSize: size * 0.18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            unit!,
+            style: TextStyle(
+              fontSize: size * 0.09,
+              color: Colors.grey.shade500,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: size * 0.1,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Color _getColorForValue(double value) {
-    if (value < 0.33) return Colors.red.shade600;
-    if (value < 0.66) return Colors.orange.shade600;
-    return Colors.green.shade600;
+  Color _colorForRatio(double r) {
+    if (r < 0.33) return Colors.redAccent;
+    if (r < 0.66) return Colors.orange;
+    return Colors.green.shade500;
   }
 }
 
-class _SpeedometerPainter extends CustomPainter {
-  final double value;
-  final double maxSpeed;
+class _GaugePainter extends CustomPainter {
+  final double ratio;
+  final Color color;
 
-  _SpeedometerPainter({
-    required this.value,
-    required this.maxSpeed,
-  });
+  _GaugePainter({required this.ratio, required this.color});
+
+  static const double _startAngle = pi * 0.85;
+  static const double _sweepAngle = pi * 1.3;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 20;
-    
-    // Draw background arc
-    final backgroundPaint = Paint()
-      ..color = Colors.grey.shade200
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 20
-      ..strokeCap = StrokeCap.round;
+    final center = Offset(size.width / 2, size.height * 0.92);
+    final radius = size.width / 2 - 12;
 
+    // Track background
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
-      pi * 0.75, // Start angle (bottom left)
-      pi * 1.5, // Sweep angle (270 degrees)
+      _startAngle,
+      _sweepAngle,
       false,
-      backgroundPaint,
+      Paint()
+        ..color = Colors.grey.shade200
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 14
+        ..strokeCap = StrokeCap.round,
     );
 
-    // Draw progress arc with gradient effect (only if value > 0)
-    if (value > 0.001) {
-      final progressPaint = Paint()
-        ..shader = SweepGradient(
-          startAngle: pi * 0.75,
-          endAngle: pi * 0.75 + pi * 1.5 * value,
-          colors: [
-            Colors.red.shade400,
-            Colors.orange.shade400,
-            Colors.green.shade400,
-          ],
-          stops: const [0.0, 0.5, 1.0],
-        ).createShader(Rect.fromCircle(center: center, radius: radius))
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 20
-        ..strokeCap = StrokeCap.round;
-
+    // Colored progress arc
+    if (ratio > 0.001) {
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
-        pi * 0.75,
-        pi * 1.5 * value,
+        _startAngle,
+        _sweepAngle * ratio,
         false,
-        progressPaint,
+        Paint()
+          ..shader = SweepGradient(
+            startAngle: _startAngle,
+            endAngle: _startAngle + _sweepAngle * ratio,
+            colors: [Colors.redAccent, Colors.orange, color],
+            stops: const [0.0, 0.5, 1.0],
+          ).createShader(Rect.fromCircle(center: center, radius: radius))
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 14
+          ..strokeCap = StrokeCap.round,
       );
     }
 
-    // Draw speed markers
-    _drawSpeedMarkers(canvas, center, radius, size);
-
-    // Draw needle
-    final needleAngle = pi * 0.75 + (pi * 1.5 * value);
-    final needleLength = radius - 10;
+    // Needle
+    final needleAngle = _startAngle + _sweepAngle * ratio;
     final needleEnd = Offset(
-      center.dx + needleLength * cos(needleAngle),
-      center.dy + needleLength * sin(needleAngle),
+      center.dx + (radius - 8) * cos(needleAngle),
+      center.dy + (radius - 8) * sin(needleAngle),
+    );
+    canvas.drawLine(
+      center,
+      needleEnd,
+      Paint()
+        ..color = Colors.grey.shade800
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round,
     );
 
-    final needlePaint = Paint()
-      ..color = Colors.grey.shade800
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawLine(center, needleEnd, needlePaint);
-
-    // Draw center circle
-    final centerPaint = Paint()
-      ..color = Colors.grey.shade800
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(center, 8, centerPaint);
-  }
-
-  void _drawSpeedMarkers(Canvas canvas, Offset center, double radius, Size size) {
-    final textPainter = TextPainter(
-      textDirection: TextDirection.ltr,
+    // Center dot
+    canvas.drawCircle(
+      center,
+      6,
+      Paint()..color = Colors.grey.shade800,
     );
-
-    // Draw markers at 0%, 25%, 50%, 75%, 100% of max speed
-    final markers = [0.0, 0.25, 0.5, 0.75, 1.0];
-    
-    for (final marker in markers) {
-      final angle = pi * 0.75 + (pi * 1.5 * marker);
-      final markerRadius = radius + 15;
-      final markerPos = Offset(
-        center.dx + markerRadius * cos(angle),
-        center.dy + markerRadius * sin(angle),
-      );
-
-      // Draw speed value
-      final speedValue = (maxSpeed * marker).toInt();
-      textPainter.text = TextSpan(
-        text: '$speedValue',
-        style: TextStyle(
-          color: Colors.grey.shade700,
-          fontSize: size.width * 0.06,
-          fontWeight: FontWeight.w500,
-        ),
-      );
-      textPainter.layout();
-      textPainter.paint(
-        canvas,
-        Offset(
-          markerPos.dx - textPainter.width / 2,
-          markerPos.dy - textPainter.height / 2,
-        ),
-      );
-    }
   }
 
   @override
-  bool shouldRepaint(_SpeedometerPainter oldDelegate) {
-    return oldDelegate.value != value;
-  }
+  bool shouldRepaint(_GaugePainter old) => old.ratio != ratio || old.color != color;
 }

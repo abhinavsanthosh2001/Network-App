@@ -22,6 +22,11 @@ class SpeedTestScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Speed Test'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            onPressed: () => _showMethodologyModal(context),
+            tooltip: 'How is speed measured?',
+          ),
           if (history.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.history),
@@ -39,7 +44,10 @@ class SpeedTestScreen extends ConsumerWidget {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
+        child: SizedBox(
+          width: double.infinity,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // Show progress if test is running
             if (testState.isRunning && testState.progress != null)
@@ -60,6 +68,7 @@ class SpeedTestScreen extends ConsumerWidget {
             _buildControlButtons(testState, ref),
           ],
         ),
+        ),
       ),
     );
   }
@@ -67,6 +76,7 @@ class SpeedTestScreen extends ConsumerWidget {
   /// Builds the idle state with start button.
   Widget _buildIdleState() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         const SizedBox(height: 40),
         Icon(
@@ -95,85 +105,77 @@ class SpeedTestScreen extends ConsumerWidget {
     );
   }
 
-  /// Builds the real-time progress display during test execution.
-  /// 
-  /// Shows:
-  /// - Speedometer gauge with current progress
-  /// - Current test phase
-  /// - Intermediate speed/latency values
-  /// - Elapsed time for current phase
-  /// 
-  /// Requirements: 6.1, 6.2, 6.3, 6.5, 6.6
   Widget _buildProgressDisplay(TestProgress progress) {
+    final isDownload = progress.phase == TestPhase.download;
+    final isUpload = progress.phase == TestPhase.upload;
+
     return Column(
       children: [
         const SizedBox(height: 20),
-        
-        // Speedometer gauge
-        SpeedometerGauge(
-          value: 0.0, // Not used anymore, speed drives the display
-          label: progress.phaseDescription,
-          currentValue: progress.currentSpeed != null
-              ? '${progress.currentSpeed!.toStringAsFixed(1)} Mbps'
-              : progress.currentLatency != null
-                  ? '${progress.currentLatency} ms'
-                  : null,
-          currentSpeed: progress.currentSpeed,
-          maxSpeed: 300.0, // Scale for speeds around 250 Mbps
+        Text(
+          progress.phaseDescription,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
-        
-        const SizedBox(height: 32),
-        
-        // Elapsed time
+        const SizedBox(height: 24),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            SpeedometerGauge(
+              label: 'DOWNLOAD',
+              currentSpeed: isDownload ? progress.currentSpeed : null,
+              maxSpeed: 300.0,
+            ),
+            SpeedometerGauge(
+              label: 'UPLOAD',
+              currentSpeed: isUpload ? progress.currentSpeed : null,
+              maxSpeed: 300.0,
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
         Text(
           'Elapsed: ${progress.elapsedSeconds}s',
           style: TextStyle(
-            fontSize: 16,
+            fontSize: 14,
             color: Colors.grey.shade600,
-            fontWeight: FontWeight.w500,
           ),
         ),
       ],
     );
   }
 
-  /// Builds the result display after test completion.
-  /// 
-  /// Shows:
-  /// - Download and upload speeds on same line
-  /// - Latency with icon and formatting
-  /// - Server name used for test
-  /// - Timestamp of test
-  /// - Poor connection indicator if applicable
-  /// - Share button to share results
-  /// - Color coding for speeds
-  /// 
-  /// Requirements: 2.7, 3.7, 4.5, 5.2
   Widget _buildResultDisplay(SpeedTestResult result, BuildContext context) {
     return Column(
       children: [
         const SizedBox(height: 20),
-        
-        // Success icon
-        Icon(
-          Icons.check_circle,
-          size: 60,
-          color: Colors.green.shade400,
-        ),
-        
-        const SizedBox(height: 16),
-        
+        Icon(Icons.check_circle, size: 56, color: Colors.green.shade400),
+        const SizedBox(height: 12),
         const Text(
           'Test Complete',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
-        
-        const SizedBox(height: 32),
-        
-        // Download and Upload speeds on same line
+        const SizedBox(height: 28),
+
+        // Two gauges showing final speeds
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            SpeedometerGauge(
+              label: 'DOWNLOAD',
+              currentSpeed: result.downloadSpeed,
+              maxSpeed: 300.0,
+            ),
+            SpeedometerGauge(
+              label: 'UPLOAD',
+              currentSpeed: result.uploadSpeed,
+              maxSpeed: 300.0,
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 20),
+
+        // Speed cards below gauges
         Row(
           children: [
             Expanded(
@@ -194,16 +196,6 @@ class SpeedTestScreen extends ConsumerWidget {
               ),
             ),
           ],
-        ),
-        
-        const SizedBox(height: 12),
-        
-        // Latency (full width)
-        _buildResultMetric(
-          'Latency',
-          result.formattedLatency,
-          Icons.timer,
-          _getLatencyColor(result.latency),
         ),
         
         const SizedBox(height: 24),
@@ -250,6 +242,8 @@ class SpeedTestScreen extends ConsumerWidget {
                 DateFormat('MMM d, yyyy HH:mm').format(result.timestamp),
               ),
               const SizedBox(height: 8),
+              _buildMetadataRow('Latency', result.formattedLatency),
+              const SizedBox(height: 8),
               _buildMetadataRow(
                 'Samples',
                 '↓${result.downloadSamples} ↑${result.uploadSamples}',
@@ -286,32 +280,30 @@ class SpeedTestScreen extends ConsumerWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color.withOpacity(0.3), width: 2),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 36, color: color),
-          const SizedBox(width: 20),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w500,
-                ),
+          Icon(icon, size: 28, color: color),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: color,
               ),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -476,6 +468,153 @@ class SpeedTestScreen extends ConsumerWidget {
         ),
       );
     }
+  }
+
+  void _showMethodologyModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.85,
+        maxChildSize: 0.95,
+        minChildSize: 0.5,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'How Speed Is Measured',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'A deep dive into how this app tests your connection',
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+              ),
+              const Divider(height: 32),
+              _modalSection(
+                icon: Icons.looks_one,
+                color: Colors.blue,
+                title: 'Phase 1 — Latency',
+                body:
+                    'Before measuring speed, the app pings the test server multiple times and records the round-trip time in milliseconds (ms). The median value is used to filter out spikes. A low latency (< 30 ms) means your connection responds quickly, which matters for gaming and video calls.',
+              ),
+              _modalSection(
+                icon: Icons.looks_two,
+                color: Colors.green,
+                title: 'Phase 2 — Download Test',
+                body:
+                    'The app opens several simultaneous HTTP connections to the server and downloads chunks of data in parallel. This is intentional — a single connection rarely saturates a fast link due to TCP congestion control. By running multiple streams at once, the test can fill your pipe and report a speed closer to your true maximum.',
+              ),
+              _modalSection(
+                icon: Icons.looks_3,
+                color: Colors.orange,
+                title: 'Phase 3 — Upload Test',
+                body:
+                    'The same parallel approach is used for upload. The app generates random data locally and pushes it to the server across multiple connections simultaneously, measuring how fast your device can send data.',
+              ),
+              _modalSection(
+                icon: Icons.merge_type,
+                color: Colors.purple,
+                title: 'Why Parallelism?',
+                body:
+                    'TCP — the protocol used for most internet traffic — limits each individual connection\'s speed to prevent network congestion. A single connection may only use a fraction of your available bandwidth. Running 4–8 parallel streams mimics how a browser loads a webpage (many resources at once) and gives a much more accurate picture of your real-world throughput.',
+              ),
+              _modalSection(
+                icon: Icons.calculate,
+                color: Colors.teal,
+                title: 'How the Final Number Is Calculated',
+                body:
+                    'Speed is sampled every ~200 ms during the test. The app collects all samples, discards the slowest 10% (warm-up period) and the fastest 10% (outliers), then averages the remaining values. This trimmed mean is more stable than a simple average and less susceptible to brief bursts or drops.',
+              ),
+              _modalSection(
+                icon: Icons.device_hub,
+                color: Colors.indigo,
+                title: 'What Can Affect Results?',
+                body:
+                    '• Other devices on your network consuming bandwidth\n'
+                    '• Wi-Fi interference or distance from your router\n'
+                    '• Server load at the time of the test\n'
+                    '• Your device\'s CPU/memory under heavy load\n'
+                    '• ISP throttling during peak hours',
+              ),
+              _modalSection(
+                icon: Icons.info_outline,
+                color: Colors.grey,
+                title: 'Mbps vs MB/s',
+                body:
+                    'Results are shown in Megabits per second (Mbps), which is the standard used by ISPs. To convert to Megabytes per second (the unit used by download managers), divide by 8. So 100 Mbps ≈ 12.5 MB/s.',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _modalSection({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String body,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  body,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: Colors.grey.shade700,
+                    height: 1.55,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Shows confirmation dialog before clearing history.
